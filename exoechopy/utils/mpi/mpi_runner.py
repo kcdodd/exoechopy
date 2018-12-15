@@ -82,9 +82,15 @@ class MPIRunner ( object ):
     # send the data on which all processes will operate
     comm.Bcast( job.data, root = MPI.ROOT )
 
-    # retrieve all results
-    results = np.empty([ comm.Get_size(), job.result_size ], dtype = np.float64 )
+    comm.Barrier()
 
+    # retrieve all results
+    results = np.empty([ job.params.shape[0], job.result_size ], dtype = np.float64 )
+
+    comm.Gatherv(
+      None,
+      [ results, split_sizes, displacements, MPI.DOUBLE ],
+      root = MPI.ROOT )
     comm.Gatherv( None, recvbuf, root = MPI.ROOT )
 
     comm.Disconnect()
