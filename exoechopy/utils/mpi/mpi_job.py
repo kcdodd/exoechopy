@@ -14,7 +14,7 @@ class MPIJob ( object ):
   #-----------------------------------------------------------------------------
   def __init__ (self,
     params : list,
-    input : np.ndarray ):
+    input : object ):
     """
 
     Parameters
@@ -26,8 +26,7 @@ class MPIJob ( object ):
       parameter arrays must be the same size or pass in MxN array
 
     input : list
-      The same input list is used for all processing calls. Each entry in the input
-      list represents separate input variabls (ndarrays)
+      The same input is used for all processes and may be an pickleable object
 
     """
     param_size = None
@@ -41,9 +40,5 @@ class MPIJob ( object ):
       elif p.shape[0] != param_size:
         raise ValueError("All params must be the same size.")
 
-
-    if not isinstance(input, np.ndarray):
-      raise ValueError("Input must be an ndarray.")
-
-    self.params = np.asarray(params, dtype = np.float64 )
+    self.params = np.asarray( params, dtype = np.float64 )
     self.input = input

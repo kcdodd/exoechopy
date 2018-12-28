@@ -101,34 +101,37 @@ class MPIRunner ( object ):
 
     print("Spawned {} processes".format(size))
 
-    # print("broadcasting params length {}".format(job.params.shape[1]))
+    # ensure consistent type for params array
+    params = np.asarray( job.params, dtype = np.float64 )
+
+    # print("broadcasting params length {}".format(params.shape[1]))
     # broadcast the length of the parameters array
-    comm.bcast( np.array([ job.params.shape[1] ], dtype = np.int32 ), root = MPI.ROOT )
+    comm.Bcast( np.array([ params.shape[1] ], dtype = np.int32 ), root = MPI.ROOT )
 
     # divide the total number of parameters equaly amonge the processes
-    params_split = np.array_split( job.params, size, axis = 0 )
+    params_split = np.array_split( params, size, axis = 0 )
 
     # print("params_split {}".format(params_split))
 
     # determine how many params each process will receive
     params_split_sizes = np.array([arr.shape[0] for arr in params_split], dtype = np.int32 )
 
-    print("broadcasting params sizes {}".format(params_split_sizes))
+    print("Broadcasting params sizes to each process {}".format(params_split_sizes))
     # broadcast the *number* of parameters each process will consume
-    comm.bcast( params_split_sizes, root = MPI.ROOT )
+    comm.Bcast( params_split_sizes, root = MPI.ROOT )
 
     # total to each process is the number of parameters each process will get
     # times the size of each parameters array
-    params_split_sizes_total = params_split_sizes * job.params.shape[1]
+    params_split_sizes_total = params_split_sizes * params.shape[1]
 
     # first process has displacement 0, the next + number of parameters in the first process,
     # the next the sum of first two processes, etc.
     displacements = np.insert(np.cumsum(params_split_sizes), 0, 0)[0:-1]
 
-    # print("scattering params {}".format(job.params))
+    # print("scattering params {}".format(params))
     # initialize parameters specific to each process
     comm.Scatterv(
-      [ job.params, params_split_sizes_total, displacements, MPI.DOUBLE ],
+      [ params, params_split_sizes_total, displacements, MPI.DOUBLE ],
       None,
       root = MPI.ROOT )
 
@@ -140,28 +143,28 @@ class MPIRunner ( object ):
     comm.Barrier()
 
     # get the sizes of each result set per parameter
-    result_sizes = np.empty( [ job.params.shape[0] ], dtype = np.int32 )
+    result_sizes = np.empty( [ params.shape[0] ], dtype = np.int32 )
 
-    print("gathering result sizes")
+    # print("gathering result sizes")
     # each process will fill in the result sizes for the parameters it received
     comm.Gatherv(
       None,
       [ result_sizes, params_split_sizes, displacements, MPI.INT ],
       root = MPI.ROOT )
 
-    print("Got result_sizes {}".format(result_sizes))
+    print("Got result sizes from each process {}".format(result_sizes))
 
     max_size = np.amax(result_sizes)
 
     # print("broadcasting max size {}".format(max_size))
     # broadcast maximum result size to all processes
-    comm.bcast( np.array([ max_size ], dtype = np.int32 ), root = MPI.ROOT )
+    comm.Bcast( np.array([ max_size ], dtype = np.int32 ), root = MPI.ROOT )
 
     # all result arrays have to be the same length to return a single 2D array
     results_split_sizes_total = params_split_sizes * max_size
 
     # retrieve all results
-    results = np.empty([ job.params.shape[0], max_size ], dtype = np.float64 )
+    results = np.empty([ params.shape[0], max_size ], dtype = np.float64 )
 
     print("gathering results")
 

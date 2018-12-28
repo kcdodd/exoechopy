@@ -49,17 +49,20 @@ class MPIKernel ( object ):
     rank = comm.Get_rank()
 
     # get length of each parameter
-    params_length = comm.bcast( None, root = 0 )[0]
+    params_length = np.empty( 1, dtype = np.int32 )
+    comm.Bcast( params_length, root = 0 )
+    params_length = params_length[0]
 
     # print("pid {} got param length {}".format(rank, params_length))
 
     # get number of parameters per process
-    params_split_sizes = comm.bcast( None, root = 0 )
-
-    print("pid {} got params_split_sizes {}".format(rank, params_split_sizes))
+    params_split_sizes = np.empty( size, dtype = np.int32 )
+    comm.Bcast( params_split_sizes, root = 0 )
 
     # number of parameters for this process
     params_size = params_split_sizes[ rank ]
+
+    print("pid {} got {} parameters".format(rank, params_size))
 
     # prepare parameters array
     params = np.empty([ params_size, params_length ])
@@ -96,7 +99,9 @@ class MPIKernel ( object ):
       root = 0 )
 
     # get the global max results size
-    max_size = comm.bcast( None, root = 0 )[0]
+    max_size = np.empty(1, dtype = np.int32 )
+    comm.Bcast( max_size, root = 0 )
+    max_size = max_size[0]
 
     # print("pid {} got max_size {}".format(rank, max_size))
 
