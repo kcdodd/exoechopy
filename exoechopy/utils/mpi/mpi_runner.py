@@ -7,46 +7,7 @@ import numpy as np
 from types import ModuleType, FunctionType
 from mpi4py import MPI
 
-class MPIJob ( object ):
-  """Ecapsulates the job parameters, inputs, and outputs
-  """
-  #-----------------------------------------------------------------------------
-  def __init__ (self,
-    params : list,
-    input : np.ndarray ):
-    """
-
-    Parameters
-    ----------
-    params : list
-      Each entry in the list of params represents a separate call to the processing
-      kernel and will result in a separate entry in the results list. The parameters
-      will be distributed approximately equal among the spawned kernel processes. All
-      parameter arrays must be the same size or pass in MxN array
-
-    input : list
-      The same input list is used for all processing calls. Each entry in the input
-      list represents separate input variabls (ndarrays)
-
-    """
-    param_size = None
-
-    for p in params:
-      if not isinstance(p, np.ndarray):
-        raise ValueError("Params must be an ndarray.")
-
-      if param_size is None:
-        param_size = p.shape[0]
-      elif p.shape[0] != param_size:
-        raise ValueError("All params must be the same size.")
-
-
-    if not isinstance(input, np.ndarray):
-      raise ValueError("Input must be an ndarray.")
-
-    self.params = np.asarray(params, dtype = np.float64 )
-    self.input = input
-
+from exoechopy.utils.mpi import MPIJob, MPIKernel
 
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 class MPIRunner ( object ):
@@ -138,16 +99,16 @@ class MPIRunner ( object ):
 
     size = num_processes
 
-    print("Number of processes {}".format(size))
+    print("Spawned {} processes".format(size))
 
-    print("broadcasting params length {}".format(job.params.shape[1]))
+    # print("broadcasting params length {}".format(job.params.shape[1]))
     # broadcast the length of the parameters array
     comm.bcast( np.array([ job.params.shape[1] ], dtype = np.int32 ), root = MPI.ROOT )
 
     # divide the total number of parameters equaly amonge the processes
     params_split = np.array_split( job.params, size, axis = 0 )
 
-    print("params_split {}".format(params_split))
+    # print("params_split {}".format(params_split))
 
     # determine how many params each process will receive
     params_split_sizes = np.array([arr.shape[0] for arr in params_split], dtype = np.int32 )
@@ -164,14 +125,14 @@ class MPIRunner ( object ):
     # the next the sum of first two processes, etc.
     displacements = np.insert(np.cumsum(params_split_sizes), 0, 0)[0:-1]
 
-    print("scattering params {}".format(job.params))
+    # print("scattering params {}".format(job.params))
     # initialize parameters specific to each process
     comm.Scatterv(
       [ job.params, params_split_sizes_total, displacements, MPI.DOUBLE ],
       None,
       root = MPI.ROOT )
 
-    print("broadcasting input {}".format(job.input))
+    # print("broadcasting input {}".format(job.input))
     # send the data on which all processes will operate
     comm.bcast( job.input, root = MPI.ROOT )
 
@@ -192,7 +153,7 @@ class MPIRunner ( object ):
 
     max_size = np.amax(result_sizes)
 
-    print("broadcasting max size {}".format(max_size))
+    # print("broadcasting max size {}".format(max_size))
     # broadcast maximum result size to all processes
     comm.bcast( np.array([ max_size ], dtype = np.int32 ), root = MPI.ROOT )
 
@@ -209,7 +170,7 @@ class MPIRunner ( object ):
       [ results, results_split_sizes_total, displacements, MPI.DOUBLE ],
       root = MPI.ROOT )
 
-    print("Got results {}".format(results))
+    # print("Got results {}".format(results))
 
     comm.Disconnect()
 
@@ -226,113 +187,3 @@ class MPIRunner ( object ):
       results_list = self._reducer( job, results_list )
 
     return results_list
-
-#+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-class MPIKernel ( object ):
-  """
-
-  Examples
-  --------
-
-  .. code-block::
-
-    import exoechopy.utils.mpi as mpi
-    import numpy as np
-
-    reducer = lambda job, results: np.sum(np.array(results)) / (job.params.shape[0] * job.params.shape[1] )
-
-    class TestKernel ( mpi.MPIKernel ):
-      def process (self, param, input):
-        return np.array([np.sum( param ** input[0] )])
-
-    if __name__ == "__main__":
-
-      kernel = TestKernel()
-
-      kernel.run()
-
-  """
-
-  #-----------------------------------------------------------------------------
-  def process ( self, param, input ):
-    """Implement this method for a given kernel
-    """
-    pass
-
-  #-----------------------------------------------------------------------------
-  def run ( self ):
-    """Runs the kernel
-    """
-    comm = MPI.Comm.Get_parent()
-    size = comm.Get_size()
-    rank = comm.Get_rank()
-
-    # get length of each parameter
-    params_length = comm.bcast( None, root = 0 )[0]
-
-    print("pid {} got param length {}".format(rank, params_length))
-
-    # get number of parameters per process
-    params_split_sizes = comm.bcast( None, root = 0 )
-
-    print("pid {} got params_split_sizes {}".format(rank, params_split_sizes))
-
-    # number of parameters for this process
-    params_size = params_split_sizes[ rank ]
-
-    # prepare parameters array
-    params = np.empty([ params_size, params_length ])
-
-    # get the parameters
-    comm.Scatterv(
-      None,
-      params,
-      root = 0 )
-
-    print("pid {} got params {}".format(rank, params))
-
-    # get the input data
-    input = comm.bcast( None, root = 0 )
-
-    print("pid {} got input {}".format(rank, input))
-
-    # process all parameters and input data
-    results = []
-
-    for param in params:
-      results.append( np.asarray( self.process(param, input) ) )
-
-    comm.Barrier()
-
-    results_sizes = np.array([ r.shape[0] for r in results ], dtype = np.int32 )
-
-    print("pid {} sending results_sizes {}".format(rank, results_sizes))
-
-    # send the size of each result
-    comm.Gatherv(
-      results_sizes,
-      None,
-      root = 0 )
-
-    # get the global max results size
-    max_size = comm.bcast( None, root = 0 )[0]
-
-    print("pid {} got max_size {}".format(rank, max_size))
-
-    # combine all results into a 2D array
-    results_arr = np.zeros([ params_size, max_size ], dtype = np.float64 )
-
-    for i, result in enumerate(results):
-
-      results_arr[i, :results_sizes[i]] = result
-
-    print("pid {} sending results_arr {}".format(rank, results_arr))
-
-    # send the results array
-    comm.Gatherv(
-      results_arr,
-      None,
-      root = 0 )
-
-
-    comm.Disconnect()
