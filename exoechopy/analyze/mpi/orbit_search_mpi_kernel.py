@@ -30,12 +30,6 @@ class OrbitSearchKernel ( MPIKernel ):
       longitude=planet.longitude,
       periapsis_arg=planet.periapsis_arg)
 
-    min_inclination = param[0]
-    max_inclination = param[1]
-
-    if min_inclination != max_inclination:
-      inclination_tests = u.Quantity(np.linspace(min_inclination, max_inclination, input.num_tests), 'rad')
-
     all_resamples = np.random.choice(
       flare_catalog.num_flares,
       ( input.num_resamples, flare_catalog.num_flares ))
@@ -48,14 +42,24 @@ class OrbitSearchKernel ( MPIKernel ):
       clip_range = (0, input.max_lag - input.filter_width))
 
 
+    kw_params = {}
+
+    for i, key in enumerate(input.parameter_order):
+      kw_params[k] = param[i]
+
     search_result = orbit_search.run(
       earth_direction_vector = earth_vect,
       lag_metric = np.mean,
       num_interpolation_points = input.num_interpolation_points,
       resample_order = all_resamples,
-      inclination = inclination_tests )
+      **kw_params )
 
     results = search_result.results
+
+    lower, upper = np.percentile(results, [(100 - input.interval)/2, 50 + input.interval/2], axis=0)
+    mean = np.mean(results, axis=0)
+
+    return np.array([lower, mean, upper], dtype = np.float64 )
 
 #+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 if __name__ == "__main__":
