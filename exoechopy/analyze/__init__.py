@@ -8,3 +8,4 @@ from .autocorrelation import *
 from .flare_manipulation import *
 from .stats import *
 from .orbit_search import *
+import mpi

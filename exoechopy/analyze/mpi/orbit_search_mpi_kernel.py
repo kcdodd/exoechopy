@@ -31,8 +31,8 @@ class OrbitSearchKernel ( MPIKernel ):
       periapsis_arg=planet.periapsis_arg)
 
     all_resamples = np.random.choice(
-      flare_catalog.num_flares,
-      ( input.num_resamples, flare_catalog.num_flares ))
+      input.flare_catalog.num_flares,
+      ( input.num_resamples, input.flare_catalog.num_flares ))
 
 
     orbit_search = OrbitSearch(
